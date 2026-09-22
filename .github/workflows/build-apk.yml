@@ -48,15 +48,6 @@ jobs:
           name: bondoolai-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Post build log tail as commit comment on failure
+      - name: Emit build log tail as error annotations on failure
         if: failure()
-        run: |
-          {
-            echo "### Build failure diagnostics"
-            echo '```'
-            tail -c 55000 build-debug.log build-release.log 2>/dev/null
-            echo '```'
-          } > comment-body.txt
-          python3 .github/scripts/post_failure_comment.py
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/emit_error_annotations.py

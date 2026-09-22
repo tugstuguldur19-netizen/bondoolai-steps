@@ -34,20 +34,24 @@ jobs:
           set -o pipefail
           flutter build apk --debug 2>&1 | tee build-debug.log
 
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bondoolai-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: ignore
+
       - name: flutter build apk --release
         run: |
           set -o pipefail
           flutter build apk --release 2>&1 | tee build-release.log
 
       - uses: actions/upload-artifact@v4
-        with:
-          name: bondoolai-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
-
-      - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: bondoolai-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: ignore
 
       - name: Emit build log tail as error annotations on failure
         if: failure()

@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,8 +27,16 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --debug
-      - run: flutter build apk --release
+
+      - name: flutter build apk --debug
+        run: |
+          set -o pipefail
+          flutter build apk --debug 2>&1 | tee build-debug.log
+
+      - name: flutter build apk --release
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build-release.log
 
       - uses: actions/upload-artifact@v4
         with:
@@ -36,3 +47,35 @@ jobs:
         with:
           name: bondoolai-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Post build log tail as commit comment on failure
+        if: failure()
+        run: |
+          {
+            echo "### Build failure diagnostics"
+            echo '```'
+            tail -c 55000 build-debug.log build-release.log 2>/dev/null
+            echo '```'
+          } > comment-body.txt
+          python3 - <<'PYEOF'
+          import json, os, urllib.request
+
+          with open("comment-body.txt") as f:
+              body = f.read()
+
+          payload = json.dumps({"body": body}).encode()
+          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/comments"
+          req = urllib.request.Request(
+              url,
+              data=payload,
+              method="POST",
+              headers={
+                  "Authorization": f"token {os.environ['GITHUB_TOKEN']}",
+                  "Accept": "application/vnd.github+json",
+              },
+          )
+          with urllib.request.urlopen(req) as resp:
+              print(resp.status, resp.read().decode())
+          PYEOF
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

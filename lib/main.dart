@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
 
-import 'screens/home_screen.dart';
+import 'screens/root_screen.dart';
+import 'state/ad_service.dart';
 import 'state/app_state.dart';
+import 'state/social_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MobileAds.instance.initialize();
 
-  final appState = GameState();
-  await appState.init();
+  final game = GameState();
+  await game.init();
+  final social = SocialState(game);
+  await social.init();
+  final ads = AdService()..preload();
 
   runApp(
-    ChangeNotifierProvider.value(
-      value: appState,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: game),
+        ChangeNotifierProvider.value(value: social),
+        Provider.value(value: ads),
+      ],
       child: const BondoolaiApp(),
     ),
   );
@@ -25,14 +35,20 @@ class BondoolaiApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    ThemeData theme(Brightness b) => ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1565C0), brightness: b),
+          useMaterial3: true,
+        );
+
     return MaterialApp(
       title: 'Бондоолой',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF64B5F6)),
-        useMaterial3: true,
-      ),
-      home: const HomeScreen(),
+      locale: const Locale('mn'),
+      supportedLocales: const [Locale('mn')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      theme: theme(Brightness.light),
+      darkTheme: theme(Brightness.dark),
+      home: const RootScreen(),
     );
   }
 }

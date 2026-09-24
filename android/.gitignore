@@ -11,3 +11,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+# Test-only signing key, intentionally committed so CI builds can update each
+# other in place. Never commit a real release/upload key.
+!app/debug.keystore

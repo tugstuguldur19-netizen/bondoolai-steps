@@ -1,139 +1,172 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/clothing_item.dart';
 
+enum Gender { male, female }
+
 const int kDefaultGoal = 10000;
 const int kCoinsPerAdWatch = 25;
+const int _kHistoryDaysKept = 400;
 
-String _todayKey() {
-  final now = DateTime.now();
-  return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-}
+String dayKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+String todayKey() => dayKey(DateTime.now());
 
 class GameState extends ChangeNotifier {
+  Gender? _gender;
   int _todaySteps = 0;
   int _goal = kDefaultGoal;
   int _coins = 0;
   final Set<String> _owned = {};
   final Map<ClothingSlot, String?> _equipped = {
-    ClothingSlot.hat: null,
-    ClothingSlot.top: null,
-    ClothingSlot.bottom: null,
-    ClothingSlot.shoes: null,
-    ClothingSlot.glasses: null,
+    for (final slot in ClothingSlot.values) slot: null,
   };
 
-  bool _permissionDenied = false;
-  String? _pedometerError;
+  /// Day key (yyyy-mm-dd) -> steps walked that day.
+  final Map<String, int> _history = {};
 
-  int _baselineSteps = 0;
-  String _baselineDate = '';
+  bool _permissionDenied = false;
+
+  /// Last raw hardware counter value seen and the day it was seen on.
+  /// Steps are accumulated as deltas between readings, so a reboot (counter
+  /// reset) or a new day never pulls in steps from another day.
+  int? _lastRaw;
+  String _lastDate = '';
 
   StreamSubscription<StepCount>? _stepSub;
-  late SharedPreferences _prefs;
+  SharedPreferences? _prefs;
 
-  int get todaySteps => _todaySteps;
+  Gender get gender => _gender ?? Gender.male;
+  bool get genderChosen => _gender != null;
+  int get todaySteps => _lastDate == todayKey() ? _todaySteps : 0;
   int get goal => _goal;
   int get coins => _coins;
   bool get permissionDenied => _permissionDenied;
-  String? get pedometerError => _pedometerError;
   Set<String> get owned => _owned;
   Map<ClothingSlot, String?> get equipped => _equipped;
+  Map<String, int> get history {
+    final h = Map<String, int>.from(_history);
+    h[todayKey()] = todaySteps;
+    return h;
+  }
 
-  double get progress => _goal <= 0 ? 0 : (_todaySteps / _goal).clamp(0.0, 1.0);
+  double get progress => _goal <= 0 ? 0 : (todaySteps / _goal).clamp(0.0, 1.0);
 
-  /// 1.0 = fully chubby (no progress), floor of 0.15 = slimmest.
+  /// 1.0 = fully chubby (no progress), 0.15 = slimmest.
   double get chubbiness => (1.0 - progress * 0.85).clamp(0.15, 1.0);
 
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
-    _goal = _prefs.getInt('goal') ?? kDefaultGoal;
-    _coins = _prefs.getInt('coins') ?? 0;
-    _owned.addAll(_prefs.getStringList('owned') ?? const []);
+    final prefs = _prefs = await SharedPreferences.getInstance();
+    final g = prefs.getString('gender');
+    _gender = Gender.values.where((v) => v.name == g).firstOrNull;
+    _goal = prefs.getInt('goal') ?? kDefaultGoal;
+    _coins = prefs.getInt('coins') ?? 0;
+
+    // Items from older catalogs no longer exist; drop them.
+    _owned.addAll(
+      (prefs.getStringList('owned') ?? const []).where((id) => itemById(id) != null),
+    );
     for (final slot in ClothingSlot.values) {
-      final id = _prefs.getString('equipped_${slot.name}');
-      if (id != null && _owned.contains(id)) {
+      final id = prefs.getString('equipped_${slot.name}');
+      if (id != null && _owned.contains(id) && itemById(id)?.slot == slot) {
         _equipped[slot] = id;
       }
     }
-    _baselineSteps = _prefs.getInt('baseline_steps') ?? 0;
-    _baselineDate = _prefs.getString('baseline_date') ?? '';
-    _todaySteps = _prefs.getInt('today_steps') ?? 0;
 
-    final today = _todayKey();
-    if (_baselineDate != today) {
-      // New day: today's steps restart at 0, baseline gets set on first
-      // sensor reading below.
-      _baselineDate = today;
-      _todaySteps = 0;
-      await _prefs.setString('baseline_date', _baselineDate);
-      await _prefs.setInt('today_steps', 0);
+    final rawHistory = prefs.getString('history');
+    if (rawHistory != null) {
+      final decoded = jsonDecode(rawHistory) as Map<String, dynamic>;
+      decoded.forEach((k, v) => _history[k] = (v as num).toInt());
     }
-    notifyListeners();
 
-    await _startPedometer();
+    _lastRaw = prefs.getInt('last_raw');
+    _lastDate = prefs.getString('last_date') ??
+        prefs.getString('baseline_date') ??
+        '';
+    _todaySteps = prefs.getInt('today_steps') ?? 0;
+
+    notifyListeners();
   }
 
-  Future<void> _startPedometer() async {
-    final status = await Permission.activityRecognition.request();
-    if (!status.isGranted) {
-      _permissionDenied = true;
+  /// Asks for the activity permission (if needed) and starts counting.
+  /// Safe to call again, e.g. after the user grants it in system settings.
+  Future<void> startTracking() async {
+    try {
+      final status = await Permission.activityRecognition.request();
+      _permissionDenied = !status.isGranted;
       notifyListeners();
-      return;
-    }
-    _permissionDenied = false;
+      if (_permissionDenied) return;
 
-    _stepSub = Pedometer.stepCountStream.listen(
-      _onStepCount,
-      onError: (Object error) {
-        _pedometerError = error.toString();
-        notifyListeners();
-      },
-      cancelOnError: false,
-    );
+      await _stepSub?.cancel();
+      _stepSub = Pedometer.stepCountStream.listen(
+        _onStepCount,
+        onError: (Object _) {},
+        cancelOnError: false,
+      );
+    } on MissingPluginException {
+      // No step sensor plugin on this platform (e.g. widget tests).
+    }
   }
 
   void _onStepCount(StepCount event) {
     final raw = event.steps;
-    final today = _todayKey();
+    final today = todayKey();
+    final last = _lastRaw;
 
-    if (_baselineDate != today) {
-      // Rolled over to a new day since last reading.
-      _baselineDate = today;
-      _baselineSteps = raw;
-    } else if (raw < _baselineSteps) {
-      // Device rebooted; the hardware counter reset to a lower value.
-      _baselineSteps = raw;
-    } else if (_todaySteps == 0 && _baselineSteps == 0) {
-      // First ever reading for a fresh install/day.
-      _baselineSteps = raw;
+    if (_lastDate != today) {
+      _todaySteps = 0;
+      _lastDate = today;
+    } else if (last != null) {
+      // A lower value than last time means the phone rebooted and the
+      // hardware counter restarted from 0.
+      _todaySteps += raw >= last ? raw - last : raw;
     }
+    _lastRaw = raw;
+    _history[today] = _todaySteps;
+    _trimHistory();
 
-    _todaySteps = raw - _baselineSteps;
-    if (_todaySteps < 0) _todaySteps = 0;
+    final prefs = _prefs;
+    if (prefs != null) {
+      prefs.setInt('last_raw', raw);
+      prefs.setString('last_date', _lastDate);
+      prefs.setInt('today_steps', _todaySteps);
+      prefs.setString('history', jsonEncode(_history));
+    }
+    notifyListeners();
+  }
 
-    _prefs.setInt('baseline_steps', _baselineSteps);
-    _prefs.setString('baseline_date', _baselineDate);
-    _prefs.setInt('today_steps', _todaySteps);
+  void _trimHistory() {
+    if (_history.length <= _kHistoryDaysKept) return;
+    final keys = _history.keys.toList()..sort();
+    for (final k in keys.take(keys.length - _kHistoryDaysKept)) {
+      _history.remove(k);
+    }
+  }
 
+  Future<void> setGender(Gender g) async {
+    _gender = g;
+    await _prefs?.setString('gender', g.name);
     notifyListeners();
   }
 
   Future<void> setGoal(int newGoal) async {
     if (newGoal <= 0) return;
     _goal = newGoal;
-    await _prefs.setInt('goal', _goal);
+    await _prefs?.setInt('goal', _goal);
     notifyListeners();
   }
 
   Future<void> addCoinsFromAd() async {
     _coins += kCoinsPerAdWatch;
-    await _prefs.setInt('coins', _coins);
+    await _prefs?.setInt('coins', _coins);
     notifyListeners();
   }
 
@@ -141,8 +174,11 @@ class GameState extends ChangeNotifier {
     if (_owned.contains(item.id) || _coins < item.price) return false;
     _coins -= item.price;
     _owned.add(item.id);
-    _prefs.setInt('coins', _coins);
-    _prefs.setStringList('owned', _owned.toList());
+    _prefs?.setInt('coins', _coins);
+    _prefs?.setStringList('owned', _owned.toList());
+    // Put it on right away so the purchase is visible.
+    _equipped[item.slot] = item.id;
+    _prefs?.setString('equipped_${item.slot.name}', item.id);
     notifyListeners();
     return true;
   }
@@ -151,10 +187,10 @@ class GameState extends ChangeNotifier {
     if (!_owned.contains(item.id)) return;
     if (_equipped[item.slot] == item.id) {
       _equipped[item.slot] = null;
-      _prefs.remove('equipped_${item.slot.name}');
+      _prefs?.remove('equipped_${item.slot.name}');
     } else {
       _equipped[item.slot] = item.id;
-      _prefs.setString('equipped_${item.slot.name}', item.id);
+      _prefs?.setString('equipped_${item.slot.name}', item.id);
     }
     notifyListeners();
   }

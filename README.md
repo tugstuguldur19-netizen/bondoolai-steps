@@ -1,99 +1,88 @@
 # Бондоолой
 
-A step-counter game: a chubby character in the center of the screen slims
-down as you walk. Set a daily step goal (default 10,000), watch rewarded
-ads to earn coins, and spend coins on clothes for him in the shop.
+Алхам тоолдог тоглоом. Та алхах тусам таны дүр — Бондоолой — туранхай, гоё болно.
+A step-counter game: your chubby, cute character slims down into a handsome
+young man or a pretty young woman as you walk.
 
-## Features implemented
+## Features
 
-- **Live step counter** using the phone's hardware step sensor
-  (`pedometer` package), reset automatically each day.
-- **Daily goal** (default 10,000 steps), editable in Settings, with quick
-  presets.
-- **Character** that visibly slims down as today's steps approach the goal
-  (`lib/widgets/character_painter.dart`). It's drawn procedurally (no image
-  assets) so it's trivial to swap in real artwork later — see below.
-- **Coins**: watch a rewarded video ad, get 25 coins.
-- **Shop**: 12 clothing items (hats, tops, bottoms, shoes, glasses) to buy
-  with coins and equip/unequip on the character.
-- All state (goal, coins, owned/equipped items, today's steps) persists
-  locally via `shared_preferences`.
+- **Choose a character** on first launch: **Хүү** (boy) or **Охин** (girl).
+  Changeable any time in Settings.
+- **Live step counter** from the phone's hardware sensor, per-day, robust to
+  reboots and midnight rollovers.
+- **Chubby → fit**: at 0 steps the character is round and cute (big head, big
+  round eyes); as today's steps approach the goal they slim down and grow up
+  (almond eyes, defined jaw / V-line face).
+- **Daily goal** (default 10,000), editable in Settings.
+- **Mongolian clothing shop**: deels (дээл), sashes (бүс), boots with
+  upturned toes (гутал), hats (тоорцог, лоовууз, жанжин малгай) and
+  accessories (хадаг, медаль, нум сум). Earn coins by watching rewarded ads.
+- **History (Түүх)**: last-30-days chart with goal line, best day, average,
+  total, goal streak, and a day-by-day record list.
+- **Friends (Найзууд)**: pick a display name, share an invite with your
+  6-character friend code, add friends by code, and see who leads
+  **today / last 7 days / last 30 days**.
+- Entire UI in Mongolian.
 
-## ⚠️ About the ads
+## Getting the APK
 
-The app ships with **Google's official public test ad unit IDs**
-(`lib/state/ad_service.dart` and the `AndroidManifest.xml` App ID). These
-show real placeholder test ads and are safe to use for testing — they will
-**not** earn real money. Before publishing:
+Every push to `main` builds the app on GitHub Actions and publishes it as a
+GitHub Release. On your phone, open:
 
-1. Create an AdMob account and app at https://admob.google.com
-2. Replace the App ID in `android/app/src/main/AndroidManifest.xml`
-   (`com.google.android.gms.ads.APPLICATION_ID`) with your real AdMob App ID.
-3. Replace `rewardedAdUnitId` in `lib/state/ad_service.dart` with your real
-   rewarded ad unit ID.
+**https://github.com/tugstuguldur19-netizen/bondoolai-steps/releases/latest**
 
-## Building the APK (automatic, via GitHub Actions)
+and download `bondoolai.apk`, then open it to install (allow "install from
+unknown sources" when asked). New builds install over the old one and keep
+your data, because every build is signed with the same test key
+(`android/app/debug.keystore`).
 
-Every push to `main`/`master` triggers `.github/workflows/build-apk.yml`,
-which builds both a debug and release APK on GitHub's servers and uploads
-them as workflow artifacts. To get the APK:
+> Before publishing to the Play Store, replace that checked-in test key with a
+> private upload key that is **not** stored in git.
 
-1. Go to this repo's **Actions** tab → the latest "Build APK" run.
-2. Scroll to **Artifacts** and download `bondoolai-debug-apk` (simplest —
-   pre-signed, installs straight onto a device) or `bondoolai-release-apk`.
-3. Unzip the download to get the `.apk`, then install it on your phone
-   (see "Installing on your phone" below).
+## Setting up Friends & Leaderboard (one time, free)
 
-You can also trigger a build manually from the Actions tab
-("Run workflow") without pushing new code.
+Friends' step counts are exchanged through a free [Supabase](https://supabase.com)
+project. Until it's configured the Friends tab shows "not activated" and
+everything else works normally.
 
-## Building the APK (locally)
+1. Create a free account at supabase.com → **New project** (any name, e.g.
+   `bondoolai`; pick the region closest to Mongolia, e.g. Singapore/Tokyo).
+2. **SQL Editor** → **New query** → paste the entire contents of
+   [`supabase/schema.sql`](supabase/schema.sql) → **Run**.
+3. **Authentication → Sign In / Providers** → turn on
+   **Allow anonymous sign-ins** → Save.
+4. **Project Settings → API**: copy the **Project URL** and the
+   **anon public** key and put them in `lib/config.dart` (`supabaseUrl`,
+   `supabaseAnonKey` default values). The anon key is designed to be public;
+   the row-level-security rules in the schema protect the data.
 
-This project is a standard Flutter app. It could not be compiled in the
-sandbox that generated it (no network access to Google's Android SDK/Maven
-servers), so build it on a machine with normal internet access:
+Users get an anonymous account automatically — no email or password. Each
+person only ever sees their own profile and the totals of people they are
+friends with.
 
-1. Install Flutter: https://docs.flutter.dev/get-started/install
-   (this also requires the Android SDK — Android Studio's installer sets
-   this up for you, or use `sdkmanager` directly).
-2. From the project root:
+## Ads
 
-   ```bash
-   flutter pub get
-   flutter build apk --debug
-   ```
+The app uses **Google's public test ad unit IDs**, which show placeholder test
+ads and earn nothing. Before publishing, create an AdMob app and replace the
+App ID in `android/app/src/main/AndroidManifest.xml` and `rewardedAdUnitId`
+in `lib/state/ad_service.dart`.
 
-   The APK will be at `build/app/outputs/flutter-apk/app-debug.apk`.
-   Debug builds are pre-signed with the Flutter debug key, so they install
-   straight onto a device with no extra setup — ideal for testing.
+## Building locally
 
-   For a smaller, optimized build instead, run `flutter build apk --release`
-   (this project's `android/app/build.gradle` is configured to sign release
-   builds with the debug key too, so it stays installable without setting
-   up your own signing key).
+```bash
+flutter pub get
+flutter build apk --release
+# -> build/app/outputs/flutter-apk/app-release.apk
+```
 
-3. Run `flutter doctor` first if either command complains about missing
-   tooling — it tells you exactly what's missing (Android SDK, licenses,
-   etc.) and how to fix it.
+The project is pinned to Flutter 3.27.1 (see the workflow).
 
-## Installing on your phone
+## Code map
 
-- **Via USB + adb**: enable Developer Options → USB debugging on the
-  phone, connect it, then run `adb install build/app/outputs/flutter-apk/app-debug.apk`.
-- **Without a cable**: copy the `.apk` file to the phone (e.g. via a
-  messaging app, cloud drive, or `adb push`), open it on the phone, and
-  allow "install from unknown sources" when prompted.
-
-The app will ask for the **Physical activity** permission on first launch
-(required on Android 10+ to read the step sensor) — allow it, or step
-counting won't update.
-
-## Where to plug in real character art later
-
-`lib/widgets/character_painter.dart` draws the character with a
-`CustomPainter` driven by a single `chubbiness` value (0.15 = slimmest,
-1.0 = chubbiest) and a map of equipped clothing per slot. To swap in real
-artwork (sprite sheets, Rive, or layered PNGs), replace `CharacterWidget`'s
-body — everything else (`GameState.chubbiness`, the shop, persistence)
-stays the same since they only depend on that one value and the equipped-
-items map.
+| Path | What |
+|---|---|
+| `lib/widgets/character_painter.dart` | The procedurally drawn boy/girl, clothes, chubby→fit morph |
+| `lib/state/app_state.dart` | Steps, history, goal, coins, wardrobe, gender |
+| `lib/state/social_state.dart` | Supabase REST client: anonymous auth, profile, friends, leaderboard |
+| `lib/screens/` | Home, Friends, History, Shop, Settings, character picker |
+| `supabase/schema.sql` | Database tables, security rules, `add_friend` / `leaderboard` functions |

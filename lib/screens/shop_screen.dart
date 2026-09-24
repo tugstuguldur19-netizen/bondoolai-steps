@@ -140,6 +140,11 @@ class _ItemCard extends StatelessWidget {
             ),
             if (wearing)
               Text('Өмссөн', style: TextStyle(color: scheme.primary, fontSize: 12)),
+            if (item.slot == ClothingSlot.belt && game.equipped[ClothingSlot.deel] == null)
+              Text(
+                'Дээлтэй хамт харагдана',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11),
+              ),
             const Spacer(),
             if (!owned)
               FilledButton.icon(

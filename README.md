@@ -11,8 +11,11 @@ young man or a pretty young woman as you walk.
 - **Live step counter** from the phone's hardware sensor, per-day, robust to
   reboots and midnight rollovers.
 - **Chubby → fit**: at 0 steps the character is round and cute (big head, big
-  round eyes); as today's steps approach the goal they slim down and grow up
-  (almond eyes, defined jaw / V-line face).
+  glossy eyes); as today's steps approach the goal they slim down and grow up.
+  Drawn in a soft, shaded "3D toy" style.
+- **Casual → Mongolian**: everyone starts in a t-shirt and shorts (the chubby
+  boy's belly pokes out under his t-shirt until he gets fit). Buy a deel in
+  the shop and the belly is always covered.
 - **Daily goal** (default 10,000), editable in Settings.
 - **Mongolian clothing shop**: deels (дээл), sashes (бүс), boots with
   upturned toes (гутал), hats (тоорцог, лоовууз, жанжин малгай) and

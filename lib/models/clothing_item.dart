@@ -36,6 +36,9 @@ class ClothingItem {
   final HatStyle? hatStyle;
   final AccessoryStyle? accessoryStyle;
 
+  /// Brocade medallion pattern woven into the fabric (deels).
+  final bool pattern;
+
   const ClothingItem({
     required this.id,
     required this.name,
@@ -45,6 +48,7 @@ class ClothingItem {
     required this.accent,
     this.hatStyle,
     this.accessoryStyle,
+    this.pattern = false,
   });
 }
 
@@ -55,8 +59,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Тоорцог',
     slot: ClothingSlot.hat,
     price: 60,
-    color: Color(0xFF1E3A8A),
-    accent: Color(0xFFD32F2F),
+    color: Color(0xFF2342A6),
+    accent: Color(0xFFC62828),
     hatStyle: HatStyle.toortsog,
   ),
   ClothingItem(
@@ -64,8 +68,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Үнэгэн лоовууз',
     slot: ClothingSlot.hat,
     price: 120,
-    color: Color(0xFFB71C1C),
-    accent: Color(0xFFA1683A),
+    color: Color(0xFF7B1E2E),
+    accent: Color(0xFFA89684),
     hatStyle: HatStyle.loovuuz,
   ),
   ClothingItem(
@@ -73,8 +77,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Жанжин малгай',
     slot: ClothingSlot.hat,
     price: 250,
-    color: Color(0xFFC9A227),
-    accent: Color(0xFFD32F2F),
+    color: Color(0xFFC9A33A),
+    accent: Color(0xFF4E3322),
     hatStyle: HatStyle.janjin,
   ),
   // Дээл
@@ -83,32 +87,35 @@ const List<ClothingItem> shopCatalog = [
     name: 'Хөх дээл',
     slot: ClothingSlot.deel,
     price: 100,
-    color: Color(0xFF1565C0),
-    accent: Color(0xFFE0B040),
+    color: Color(0xFF2553B8),
+    accent: Color(0xFFD9A441),
+    pattern: true,
   ),
   ClothingItem(
     id: 'deel_red',
     name: 'Улаан дээл',
     slot: ClothingSlot.deel,
     price: 100,
-    color: Color(0xFFB3261E),
-    accent: Color(0xFF212121),
+    color: Color(0xFF86202F),
+    accent: Color(0xFFD9A441),
+    pattern: true,
   ),
   ClothingItem(
     id: 'deel_green',
     name: 'Ногоон торгон дээл',
     slot: ClothingSlot.deel,
     price: 150,
-    color: Color(0xFF2E7D32),
-    accent: Color(0xFFF5E6B8),
+    color: Color(0xFF2E7D4F),
+    accent: Color(0xFFF0DFA8),
   ),
   ClothingItem(
     id: 'deel_gold',
     name: 'Алтан торгон дээл',
     slot: ClothingSlot.deel,
     price: 300,
-    color: Color(0xFFD4A017),
-    accent: Color(0xFF0D47A1),
+    color: Color(0xFFD6A82E),
+    accent: Color(0xFF1F4FA8),
+    pattern: true,
   ),
   // Бүс
   ClothingItem(
@@ -116,24 +123,24 @@ const List<ClothingItem> shopCatalog = [
     name: 'Улбар шар бүс',
     slot: ClothingSlot.belt,
     price: 40,
-    color: Color(0xFFEF6C00),
-    accent: Color(0xFFEF6C00),
+    color: Color(0xFFE8832A),
+    accent: Color(0xFFE8832A),
   ),
   ClothingItem(
     id: 'belt_yellow',
     name: 'Шар торгон бүс',
     slot: ClothingSlot.belt,
     price: 60,
-    color: Color(0xFFFBC02D),
-    accent: Color(0xFFFBC02D),
+    color: Color(0xFFE3BC55),
+    accent: Color(0xFFE3BC55),
   ),
   ClothingItem(
     id: 'belt_blue',
     name: 'Цэнхэр бүс',
     slot: ClothingSlot.belt,
     price: 40,
-    color: Color(0xFF29B6F6),
-    accent: Color(0xFF29B6F6),
+    color: Color(0xFF4F86C6),
+    accent: Color(0xFF4F86C6),
   ),
   // Гутал
   ClothingItem(
@@ -141,16 +148,16 @@ const List<ClothingItem> shopCatalog = [
     name: 'Хар гутал',
     slot: ClothingSlot.boots,
     price: 70,
-    color: Color(0xFF212121),
-    accent: Color(0xFF8D6E63),
+    color: Color(0xFF2A2522),
+    accent: Color(0xFF6B5B4E),
   ),
   ClothingItem(
     id: 'boots_red',
     name: 'Хээтэй улаан гутал',
     slot: ClothingSlot.boots,
     price: 120,
-    color: Color(0xFFB71C1C),
-    accent: Color(0xFFFFD54F),
+    color: Color(0xFFA3262A),
+    accent: Color(0xFFE0B040),
   ),
   // Чимэглэл
   ClothingItem(
@@ -158,8 +165,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Цэнхэр хадаг',
     slot: ClothingSlot.accessory,
     price: 80,
-    color: Color(0xFF4FC3F7),
-    accent: Color(0xFFB3E5FC),
+    color: Color(0xFF8FD3F4),
+    accent: Color(0xFFD6F0FB),
     accessoryStyle: AccessoryStyle.khadag,
   ),
   ClothingItem(
@@ -167,8 +174,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Аваргын медаль',
     slot: ClothingSlot.accessory,
     price: 150,
-    color: Color(0xFFFFC107),
-    accent: Color(0xFFD32F2F),
+    color: Color(0xFFE0B43A),
+    accent: Color(0xFFC62828),
     accessoryStyle: AccessoryStyle.medal,
   ),
   ClothingItem(
@@ -176,8 +183,8 @@ const List<ClothingItem> shopCatalog = [
     name: 'Нум сум',
     slot: ClothingSlot.accessory,
     price: 200,
-    color: Color(0xFF6D4C41),
-    accent: Color(0xFFD7CCC8),
+    color: Color(0xFF7A4B2A),
+    accent: Color(0xFFEFE6D6),
     accessoryStyle: AccessoryStyle.bow,
   ),
 ];

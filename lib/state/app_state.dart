@@ -7,7 +7,7 @@ import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/clothing_item.dart';
+import '../models/outfit.dart';
 
 enum Gender { male, female }
 
@@ -25,10 +25,8 @@ class GameState extends ChangeNotifier {
   int _todaySteps = 0;
   int _goal = kDefaultGoal;
   int _coins = 0;
-  final Set<String> _owned = {};
-  final Map<ClothingSlot, String?> _equipped = {
-    for (final slot in ClothingSlot.values) slot: null,
-  };
+  final Set<String> _owned = {defaultOutfitId};
+  String _outfit = defaultOutfitId;
 
   /// Day key (yyyy-mm-dd) -> steps walked that day.
   final Map<String, int> _history = {};
@@ -51,7 +49,7 @@ class GameState extends ChangeNotifier {
   int get coins => _coins;
   bool get permissionDenied => _permissionDenied;
   Set<String> get owned => _owned;
-  Map<ClothingSlot, String?> get equipped => _equipped;
+  String get outfitId => _outfit;
   Map<String, int> get history {
     final h = Map<String, int>.from(_history);
     h[todayKey()] = todaySteps;
@@ -70,16 +68,9 @@ class GameState extends ChangeNotifier {
     _goal = prefs.getInt('goal') ?? kDefaultGoal;
     _coins = prefs.getInt('coins') ?? 0;
 
-    // Items from older catalogs no longer exist; drop them.
-    _owned.addAll(
-      (prefs.getStringList('owned') ?? const []).where((id) => itemById(id) != null),
-    );
-    for (final slot in ClothingSlot.values) {
-      final id = prefs.getString('equipped_${slot.name}');
-      if (id != null && _owned.contains(id) && itemById(id)?.slot == slot) {
-        _equipped[slot] = id;
-      }
-    }
+    _owned.addAll(prefs.getStringList('owned_outfits') ?? const []);
+    final outfit = prefs.getString('outfit');
+    if (outfit != null && _owned.contains(outfit)) _outfit = outfit;
 
     final rawHistory = prefs.getString('history');
     if (rawHistory != null) {
@@ -170,28 +161,21 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool buyItem(ClothingItem item) {
-    if (_owned.contains(item.id) || _coins < item.price) return false;
-    _coins -= item.price;
-    _owned.add(item.id);
+  bool buyOutfit(Outfit outfit) {
+    if (_owned.contains(outfit.id) || _coins < outfit.price) return false;
+    _coins -= outfit.price;
+    _owned.add(outfit.id);
     _prefs?.setInt('coins', _coins);
-    _prefs?.setStringList('owned', _owned.toList());
+    _prefs?.setStringList('owned_outfits', _owned.toList());
     // Put it on right away so the purchase is visible.
-    _equipped[item.slot] = item.id;
-    _prefs?.setString('equipped_${item.slot.name}', item.id);
-    notifyListeners();
+    wearOutfit(outfit);
     return true;
   }
 
-  void toggleEquip(ClothingItem item) {
-    if (!_owned.contains(item.id)) return;
-    if (_equipped[item.slot] == item.id) {
-      _equipped[item.slot] = null;
-      _prefs?.remove('equipped_${item.slot.name}');
-    } else {
-      _equipped[item.slot] = item.id;
-      _prefs?.setString('equipped_${item.slot.name}', item.id);
-    }
+  void wearOutfit(Outfit outfit) {
+    if (!_owned.contains(outfit.id)) return;
+    _outfit = outfit.id;
+    _prefs?.setString('outfit', outfit.id);
     notifyListeners();
   }
 

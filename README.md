@@ -10,16 +10,15 @@ young man or a pretty young woman as you walk.
   Changeable any time in Settings.
 - **Live step counter** from the phone's hardware sensor, per-day, robust to
   reboots and midnight rollovers.
-- **Chubby → fit**: at 0 steps the character is round and cute (big head, big
-  glossy eyes); as today's steps approach the goal they slim down and grow up.
-  Drawn in a soft, shaded "3D toy" style.
-- **Casual → Mongolian**: everyone starts in a t-shirt and shorts (the chubby
-  boy's belly pokes out under his t-shirt until he gets fit). Buy a deel in
-  the shop and the belly is always covered.
+- **Character art** from `assets/characters/<boy|girl>_<outfit>.png`
+  (cut out from the reference illustration; the deels were closed up so the
+  belly never shows).
+- **Chubby → fit**: at 0 steps the belly area of the picture is widened;
+  it eases back to the original illustration as today's steps reach the goal.
 - **Daily goal** (default 10,000), editable in Settings.
-- **Mongolian clothing shop**: deels (дээл), sashes (бүс), boots with
-  upturned toes (гутал), hats (тоорцог, лоовууз, жанжин малгай) and
-  accessories (хадаг, медаль, нум сум). Earn coins by watching rewarded ads.
+- **Outfit shop**: everyone starts in a plain deel; buy the blue silk deel with
+  тоорцог and medal, the red silk deel with a fox-fur лоовууз, or the golden
+  deel with жанжин малгай and bow. Earn coins by watching rewarded ads.
 - **History (Түүх)**: last-30-days chart with goal line, best day, average,
   total, goal streak, and a day-by-day record list.
 - **Friends (Найзууд)**: pick a display name, share an invite with your
@@ -84,7 +83,8 @@ The project is pinned to Flutter 3.27.1 (see the workflow).
 
 | Path | What |
 |---|---|
-| `lib/widgets/character_painter.dart` | The procedurally drawn boy/girl, clothes, chubby→fit morph |
+| `lib/widgets/character.dart` | Shows the character image and the chubby→fit belly widening |
+| `lib/models/outfit.dart` | Outfit catalog (names, prices, image per gender) |
 | `lib/state/app_state.dart` | Steps, history, goal, coins, wardrobe, gender |
 | `lib/state/social_state.dart` | Supabase REST client: anonymous auth, profile, friends, leaderboard |
 | `lib/screens/` | Home, Friends, History, Shop, Settings, character picker |

@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../state/ad_service.dart';
 import '../state/app_state.dart';
 import '../util/format.dart';
-import '../widgets/character_painter.dart';
+import '../widgets/character.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -122,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: FittedBox(
                   child: CharacterWidget(
                     chubbiness: game.chubbiness,
-                    equipped: game.equipped,
+                    outfitId: game.outfitId,
                     gender: game.gender,
                   ),
                 ),

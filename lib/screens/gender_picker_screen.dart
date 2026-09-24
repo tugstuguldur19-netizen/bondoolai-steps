@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../widgets/character_painter.dart';
+import '../models/outfit.dart';
+import '../widgets/character.dart';
 
 /// Shown on first launch before anything else.
 class GenderPickerScreen extends StatelessWidget {
@@ -103,9 +104,9 @@ class _GenderCard extends StatelessWidget {
                 child: FittedBox(
                   child: CharacterWidget(
                     chubbiness: 1.0,
-                    equipped: const {},
+                    outfitId: defaultOutfitId,
                     gender: gender,
-                    size: 160,
+                    height: 320,
                   ),
                 ),
               ),

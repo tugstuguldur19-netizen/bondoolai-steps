@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
@@ -50,5 +51,34 @@ void main() {
     expect(formatNumber(999), '999');
     expect(formatNumber(10000), '10,000');
     expect(formatNumber(1234567), '1,234,567');
+  });
+
+  testWidgets('Health Connect steps merge with the phone sensor (higher wins)', (tester) async {
+    const channel = MethodChannel('bondoolai/health');
+    final today = todayKey();
+    final yesterday = dayKey(DateTime.now().subtract(const Duration(days: 1)));
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      switch (call.method) {
+        case 'status':
+          return 'available';
+        case 'hasPermission':
+          return true;
+        case 'dailySteps':
+          return {today: 4321, yesterday: 12000};
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+
+    final game = GameState();
+    expect(game.todaySteps, 0);
+    expect(await game.connectHealth(), isNull);
+    expect(game.healthConnected, isTrue);
+    expect(game.todaySteps, 4321);
+    expect(game.history[yesterday], 12000);
+
+    await game.disconnectHealth();
+    expect(game.healthConnected, isFalse);
+    expect(game.todaySteps, 0);
   });
 }

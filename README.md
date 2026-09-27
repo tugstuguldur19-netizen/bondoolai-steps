@@ -10,6 +10,11 @@ young man or a pretty young woman as you walk.
   Changeable any time in Settings.
 - **Live step counter** from the phone's hardware sensor, per-day, robust to
   reboots and midnight rollovers.
+- **Samsung Health (via Health Connect)**: Settings → "Samsung Health холбох".
+  Samsung Health counts steps in the background all day; the app reads its
+  daily totals through Android Health Connect (refreshed on open and every 2
+  minutes while open) and, per day, shows whichever of phone sensor / Health
+  Connect saw more steps. Requires Android 8.0+.
 - **Character art** from `assets/characters/<boy|girl>_<outfit>.png`
   (cut out from the reference illustration; the deels were closed up so the
   belly never shows).

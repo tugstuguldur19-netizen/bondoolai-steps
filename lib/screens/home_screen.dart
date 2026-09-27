@@ -30,9 +30,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Coming back from system settings: pick up a newly granted permission.
     if (state != AppLifecycleState.resumed) return;
     final game = context.read<GameState>();
+    // Samsung Health may have synced new steps while we were away.
+    game.refreshHealth();
+    // Coming back from system settings: pick up a newly granted permission.
     if (!game.permissionDenied) return;
     Permission.activityRecognition.status.then((s) {
       if (s.isGranted) game.startTracking();
@@ -144,12 +146,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               '${formatNumber(game.todaySteps)} / ${formatNumber(game.goal)} алхам ($percent%)',
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 12),
+            _HealthSourceChip(connected: game.healthConnected),
+            const SizedBox(height: 4),
             const _WatchAdButton(),
             const SizedBox(height: 16),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Shows where the steps come from; tapping opens Settings to connect.
+class _HealthSourceChip extends StatelessWidget {
+  final bool connected;
+  const _HealthSourceChip({required this.connected});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return TextButton.icon(
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const SettingsScreen()),
+      ),
+      icon: Icon(
+        connected ? Icons.favorite : Icons.link,
+        size: 18,
+        color: connected ? Colors.pink.shade400 : scheme.primary,
+      ),
+      label: Text(connected ? 'Samsung Health-тэй холбогдсон' : 'Samsung Health холбох'),
     );
   }
 }

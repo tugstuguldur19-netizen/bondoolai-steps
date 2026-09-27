@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/outfit.dart';
+import '../services/health_connect.dart';
 
 enum Gender { male, female }
 
@@ -28,8 +30,16 @@ class GameState extends ChangeNotifier {
   final Set<String> _owned = {defaultOutfitId};
   String _outfit = defaultOutfitId;
 
-  /// Day key (yyyy-mm-dd) -> steps walked that day.
+  /// Day key (yyyy-mm-dd) -> steps counted by this phone's step sensor.
   final Map<String, int> _history = {};
+
+  /// Day key -> steps from Health Connect (Samsung Health, Google Fit, ...).
+  /// Those apps count in the background all day, so for each day we show
+  /// whichever source saw more steps.
+  final Map<String, int> _healthHistory = {};
+  bool _healthConnected = false;
+  DateTime? _healthSyncedAt;
+  Timer? _healthTimer;
 
   bool _permissionDenied = false;
 
@@ -44,7 +54,10 @@ class GameState extends ChangeNotifier {
 
   Gender get gender => _gender ?? Gender.male;
   bool get genderChosen => _gender != null;
-  int get todaySteps => _lastDate == todayKey() ? _todaySteps : 0;
+  int get _sensorToday => _lastDate == todayKey() ? _todaySteps : 0;
+  int get todaySteps => math.max(_sensorToday, _healthHistory[todayKey()] ?? 0);
+  bool get healthConnected => _healthConnected;
+  DateTime? get healthSyncedAt => _healthSyncedAt;
   int get goal => _goal;
   int get coins => _coins;
   bool get permissionDenied => _permissionDenied;
@@ -52,6 +65,9 @@ class GameState extends ChangeNotifier {
   String get outfitId => _outfit;
   Map<String, int> get history {
     final h = Map<String, int>.from(_history);
+    _healthHistory.forEach((day, steps) {
+      if (steps > (h[day] ?? 0)) h[day] = steps;
+    });
     h[todayKey()] = todaySteps;
     return h;
   }
@@ -84,7 +100,79 @@ class GameState extends ChangeNotifier {
         '';
     _todaySteps = prefs.getInt('today_steps') ?? 0;
 
+    final rawHealth = prefs.getString('health_history');
+    if (rawHealth != null) {
+      (jsonDecode(rawHealth) as Map<String, dynamic>)
+          .forEach((k, v) => _healthHistory[k] = (v as num).toInt());
+    }
+    _healthConnected = prefs.getBool('health_connected') ?? false;
+
     notifyListeners();
+  }
+
+  // ---- Health Connect (Samsung Health) -------------------------------------
+
+  /// Connects to Health Connect. Returns null on success, otherwise a
+  /// Mongolian message explaining what's missing.
+  Future<String?> connectHealth() async {
+    final status = await HealthConnect.status();
+    if (status == HealthConnectStatus.needsInstall) {
+      await HealthConnect.openInstall();
+      return 'Health Connect-ийг суулгаж (эсвэл шинэчилж) дуусаад дахин оролдоно уу.';
+    }
+    if (status == HealthConnectStatus.unavailable) {
+      return 'Энэ утсанд Health Connect ажиллахгүй байна.';
+    }
+    final granted = await HealthConnect.hasPermission() || await HealthConnect.requestPermission();
+    if (!granted) {
+      return 'Алхамын мэдээлэл унших зөвшөөрөл өгөөгүй байна.';
+    }
+    _healthConnected = true;
+    await _prefs?.setBool('health_connected', true);
+    notifyListeners();
+    await refreshHealth();
+    _startHealthTimer();
+    return null;
+  }
+
+  Future<void> disconnectHealth() async {
+    _healthConnected = false;
+    _healthHistory.clear();
+    _healthSyncedAt = null;
+    _healthTimer?.cancel();
+    _healthTimer = null;
+    await _prefs?.setBool('health_connected', false);
+    await _prefs?.remove('health_history');
+    notifyListeners();
+  }
+
+  /// Pulls the last 35 days of step totals from Health Connect.
+  Future<void> refreshHealth() async {
+    if (!_healthConnected) return;
+    // Health Connect only serves reads to the app on screen.
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+    if (!await HealthConnect.hasPermission()) {
+      // Permission was revoked in Health Connect's settings.
+      await disconnectHealth();
+      return;
+    }
+    try {
+      final days = await HealthConnect.dailySteps(35);
+      _healthHistory
+        ..clear()
+        ..addAll(days);
+      _healthSyncedAt = DateTime.now();
+      await _prefs?.setString('health_history', jsonEncode(_healthHistory));
+      notifyListeners();
+    } on PlatformException {
+      // Try again on the next refresh.
+    }
+  }
+
+  void _startHealthTimer() {
+    _healthTimer?.cancel();
+    _healthTimer = Timer.periodic(const Duration(minutes: 2), (_) => refreshHealth());
   }
 
   /// Asks for the activity permission (if needed) and starts counting.
@@ -104,6 +192,10 @@ class GameState extends ChangeNotifier {
       );
     } on MissingPluginException {
       // No step sensor plugin on this platform (e.g. widget tests).
+    }
+    if (_healthConnected) {
+      await refreshHealth();
+      _startHealthTimer();
     }
   }
 
@@ -182,6 +274,7 @@ class GameState extends ChangeNotifier {
   @override
   void dispose() {
     _stepSub?.cancel();
+    _healthTimer?.cancel();
     super.dispose();
   }
 }

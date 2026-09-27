@@ -4,12 +4,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:pedometer/pedometer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/outfit.dart';
 import '../services/health_connect.dart';
+import '../services/step_service.dart';
 
 enum Gender { male, female }
 
@@ -24,14 +24,15 @@ String todayKey() => dayKey(DateTime.now());
 
 class GameState extends ChangeNotifier {
   Gender? _gender;
-  int _todaySteps = 0;
   int _goal = kDefaultGoal;
   int _coins = 0;
   final Set<String> _owned = {defaultOutfitId};
   String _outfit = defaultOutfitId;
 
-  /// Day key (yyyy-mm-dd) -> steps counted by this phone's step sensor.
+  /// Day key (yyyy-mm-dd) -> steps counted by this phone's step sensor
+  /// (recorded by the native background service, StepCounterService.kt).
   final Map<String, int> _history = {};
+  Timer? _pollTimer;
 
   /// Day key -> steps from Health Connect (Samsung Health, Google Fit, ...).
   /// Those apps count in the background all day, so for each day we show
@@ -42,19 +43,11 @@ class GameState extends ChangeNotifier {
   Timer? _healthTimer;
 
   bool _permissionDenied = false;
-
-  /// Last raw hardware counter value seen and the day it was seen on.
-  /// Steps are accumulated as deltas between readings, so a reboot (counter
-  /// reset) or a new day never pulls in steps from another day.
-  int? _lastRaw;
-  String _lastDate = '';
-
-  StreamSubscription<StepCount>? _stepSub;
   SharedPreferences? _prefs;
 
   Gender get gender => _gender ?? Gender.male;
   bool get genderChosen => _gender != null;
-  int get _sensorToday => _lastDate == todayKey() ? _todaySteps : 0;
+  int get _sensorToday => _history[todayKey()] ?? 0;
   int get todaySteps => math.max(_sensorToday, _healthHistory[todayKey()] ?? 0);
   bool get healthConnected => _healthConnected;
   DateTime? get healthSyncedAt => _healthSyncedAt;
@@ -93,12 +86,6 @@ class GameState extends ChangeNotifier {
       final decoded = jsonDecode(rawHistory) as Map<String, dynamic>;
       decoded.forEach((k, v) => _history[k] = (v as num).toInt());
     }
-
-    _lastRaw = prefs.getInt('last_raw');
-    _lastDate = prefs.getString('last_date') ??
-        prefs.getString('baseline_date') ??
-        '';
-    _todaySteps = prefs.getInt('today_steps') ?? 0;
 
     final rawHealth = prefs.getString('health_history');
     if (rawHealth != null) {
@@ -175,23 +162,24 @@ class GameState extends ChangeNotifier {
     _healthTimer = Timer.periodic(const Duration(minutes: 2), (_) => refreshHealth());
   }
 
-  /// Asks for the activity permission (if needed) and starts counting.
-  /// Safe to call again, e.g. after the user grants it in system settings.
+  /// Asks for the needed permissions and starts the background step
+  /// counter. Safe to call again, e.g. after the user grants a permission in
+  /// system settings.
   Future<void> startTracking() async {
     try {
       final status = await Permission.activityRecognition.request();
       _permissionDenied = !status.isGranted;
       notifyListeners();
-      if (_permissionDenied) return;
-
-      await _stepSub?.cancel();
-      _stepSub = Pedometer.stepCountStream.listen(
-        _onStepCount,
-        onError: (Object _) {},
-        cancelOnError: false,
-      );
+      if (!_permissionDenied) {
+        // Android 13+: needed to show the ongoing "today's steps" notification.
+        await Permission.notification.request();
+        await StepService.start(goal: _goal, seedToday: _sensorToday);
+        await syncSteps();
+        _pollTimer?.cancel();
+        _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) => syncSteps());
+      }
     } on MissingPluginException {
-      // No step sensor plugin on this platform (e.g. widget tests).
+      // No permission plugin on this platform (e.g. widget tests).
     }
     if (_healthConnected) {
       await refreshHealth();
@@ -199,30 +187,21 @@ class GameState extends ChangeNotifier {
     }
   }
 
-  void _onStepCount(StepCount event) {
-    final raw = event.steps;
-    final today = todayKey();
-    final last = _lastRaw;
-
-    if (_lastDate != today) {
-      _todaySteps = 0;
-      _lastDate = today;
-    } else if (last != null) {
-      // A lower value than last time means the phone rebooted and the
-      // hardware counter restarted from 0.
-      _todaySteps += raw >= last ? raw - last : raw;
-    }
-    _lastRaw = raw;
-    _history[today] = _todaySteps;
+  /// Pulls the per-day totals the background service has recorded.
+  Future<void> syncSteps() async {
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    if (lifecycle != null && lifecycle != AppLifecycleState.resumed) return;
+    final days = await StepService.snapshot();
+    var changed = false;
+    days.forEach((day, steps) {
+      if (steps > (_history[day] ?? 0)) {
+        _history[day] = steps;
+        changed = true;
+      }
+    });
+    if (!changed) return;
     _trimHistory();
-
-    final prefs = _prefs;
-    if (prefs != null) {
-      prefs.setInt('last_raw', raw);
-      prefs.setString('last_date', _lastDate);
-      prefs.setInt('today_steps', _todaySteps);
-      prefs.setString('history', jsonEncode(_history));
-    }
+    await _prefs?.setString('history', jsonEncode(_history));
     notifyListeners();
   }
 
@@ -244,6 +223,7 @@ class GameState extends ChangeNotifier {
     if (newGoal <= 0) return;
     _goal = newGoal;
     await _prefs?.setInt('goal', _goal);
+    await StepService.setGoal(_goal);
     notifyListeners();
   }
 
@@ -273,7 +253,7 @@ class GameState extends ChangeNotifier {
 
   @override
   void dispose() {
-    _stepSub?.cancel();
+    _pollTimer?.cancel();
     _healthTimer?.cancel();
     super.dispose();
   }

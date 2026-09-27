@@ -81,4 +81,20 @@ void main() {
     expect(game.healthConnected, isFalse);
     expect(game.todaySteps, 0);
   });
+
+  testWidgets('steps counted by the background service show up in the app', (tester) async {
+    const channel = MethodChannel('bondoolai/steps');
+    final today = todayKey();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'snapshot') return {today: 5000};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+
+    final game = GameState();
+    expect(game.todaySteps, 0);
+    await game.syncSteps();
+    expect(game.todaySteps, 5000);
+    expect(game.history[today], 5000);
+  });
 }

@@ -43,6 +43,25 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        MethodChannel(messenger, "bondoolai/steps").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> {
+                    call.argument<Int>("goal")?.let { StepStore.setGoal(this, it) }
+                    call.argument<Int>("seedToday")?.let { StepStore.seedToday(this, it) }
+                    StepStore.setEnabled(this, true)
+                    StepCounterService.start(this)
+                    result.success(null)
+                }
+                "setGoal" -> {
+                    StepStore.setGoal(this, call.argument<Int>("goal") ?: 10_000)
+                    if (StepStore.enabled(this)) StepCounterService.start(this, StepCounterService.ACTION_REFRESH)
+                    result.success(null)
+                }
+                "snapshot" -> result.success(StepStore.snapshot(this))
+                else -> result.notImplemented()
+            }
+        }
+
         MethodChannel(messenger, "bondoolai/health").setMethodCallHandler { call, result ->
             when (call.method) {
                 "status" -> result.success(healthStatus())

@@ -32,7 +32,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     final game = context.read<GameState>();
-    // Samsung Health may have synced new steps while we were away.
+    // Pick up steps counted in the background while we were away.
+    game.syncSteps();
     game.refreshHealth();
     // Coming back from system settings: pick up a newly granted permission.
     if (!game.permissionDenied) return;

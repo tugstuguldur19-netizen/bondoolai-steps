@@ -8,8 +8,11 @@ young man or a pretty young woman as you walk.
 
 - **Choose a character** on first launch: **Хүү** (boy) or **Охин** (girl).
   Changeable any time in Settings.
-- **Live step counter** from the phone's hardware sensor, per-day, robust to
-  reboots and midnight rollovers.
+- **Background step counter**: a native foreground service
+  (`StepCounterService.kt`) listens to the phone's step sensor all day, starts
+  on boot and after app updates, and shows a quiet notification with today's
+  steps. Counting never waits for the app to be opened; the app reads the
+  service's per-day totals (`StepStore.kt`).
 - **Samsung Health (via Health Connect)**: Settings → "Samsung Health холбох".
   Samsung Health counts steps in the background all day; the app reads its
   daily totals through Android Health Connect (refreshed on open and every 2

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:bondoolai_steps/main.dart';
+import 'package:bondoolai_steps/models/items.dart';
 import 'package:bondoolai_steps/state/ad_service.dart';
 import 'package:bondoolai_steps/state/app_state.dart';
 import 'package:bondoolai_steps/state/social_state.dart';
@@ -96,5 +97,52 @@ void main() {
     await game.syncSteps();
     expect(game.todaySteps, 5000);
     expect(game.history[today], 5000);
+  });
+
+  testWidgets('body level: starts at 6 (goal >= 10k) or 5, reaches 1 at the goal', (tester) async {
+    const channel = MethodChannel('bondoolai/steps');
+    var steps = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'snapshot') return {todayKey(): steps};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null));
+
+    final game = GameState();
+    expect(game.startLevel, 6);
+    expect(game.level, 6);
+    expect(game.stepsToNextLevel, 2000);
+
+    for (final (walked, level) in [(1999, 6), (2000, 5), (5000, 4), (9999, 2), (10000, 1), (15000, 1)]) {
+      steps = walked;
+      await game.syncSteps();
+      expect(game.level, level, reason: '$walked steps');
+    }
+    expect(game.stepsToNextLevel, isNull);
+
+    await game.setGoal(8000);
+    expect(game.startLevel, 5);
+    expect(game.level, 1);
+    await game.setGoal(20000);
+    expect(game.startLevel, 6);
+    expect(game.level, 3); // 15,000 / 20,000 = 75% -> the 60-80% band
+  });
+
+  testWidgets('buying puts an item on; deel and props are separate slots', (tester) async {
+    final game = GameState();
+    for (var i = 0; i < 40; i++) {
+      await game.addCoinsFromAd();
+    }
+    final hat = itemById('hat_janjin')!;
+    final deel = itemById('torgon')!;
+    expect(game.buy(hat), isTrue);
+    expect(game.isWearing(hat), isTrue);
+    expect(game.buy(hat), isFalse); // already owned
+    expect(game.buy(deel), isTrue);
+    expect(game.equipped[ItemSlot.deel], 'torgon');
+    expect(game.equipped[ItemSlot.hat], 'hat_janjin');
+    game.toggleWear(deel);
+    expect(game.equipped.containsKey(ItemSlot.deel), isFalse);
+    expect(game.coins, 40 * kCoinsPerAdWatch - hat.price - deel.price);
   });
 }

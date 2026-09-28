@@ -7,7 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/outfit.dart';
+import '../models/items.dart';
 import '../services/health_connect.dart';
 import '../services/step_service.dart';
 
@@ -26,8 +26,8 @@ class GameState extends ChangeNotifier {
   Gender? _gender;
   int _goal = kDefaultGoal;
   int _coins = 0;
-  final Set<String> _owned = {defaultOutfitId};
-  String _outfit = defaultOutfitId;
+  final Set<String> _owned = {};
+  final Map<ItemSlot, String> _equipped = {};
 
   /// Day key (yyyy-mm-dd) -> steps counted by this phone's step sensor
   /// (recorded by the native background service, StepCounterService.kt).
@@ -55,7 +55,7 @@ class GameState extends ChangeNotifier {
   int get coins => _coins;
   bool get permissionDenied => _permissionDenied;
   Set<String> get owned => _owned;
-  String get outfitId => _outfit;
+  Map<ItemSlot, String> get equipped => Map.unmodifiable(_equipped);
   Map<String, int> get history {
     final h = Map<String, int>.from(_history);
     _healthHistory.forEach((day, steps) {
@@ -67,8 +67,26 @@ class GameState extends ChangeNotifier {
 
   double get progress => _goal <= 0 ? 0 : (todaySteps / _goal).clamp(0.0, 1.0);
 
-  /// 1.0 = fully chubby (no progress), 0.15 = slimmest.
-  double get chubbiness => (1.0 - progress * 0.85).clamp(0.15, 1.0);
+  /// Body level at the start of the day: 6 (obese) for goals of 10,000 or
+  /// more, 5 (overweight) for smaller goals.
+  int get startLevel => _goal >= 10000 ? 6 : 5;
+
+  /// Current body level: 1 = fit. Walking toward the goal steps it down
+  /// evenly from [startLevel]; reaching the goal gives level 1.
+  int get level {
+    final s = startLevel;
+    return (s - (progress * (s - 1)).floor()).clamp(1, s);
+  }
+
+  /// Steps still needed today to reach the next (leaner) level, or null at
+  /// level 1.
+  int? get stepsToNextLevel {
+    final l = level;
+    if (l <= 1) return null;
+    final s = startLevel;
+    final needed = ((s - (l - 1)) / (s - 1) * _goal).ceil();
+    return math.max(0, needed - todaySteps);
+  }
 
   Future<void> init() async {
     final prefs = _prefs = await SharedPreferences.getInstance();
@@ -77,9 +95,12 @@ class GameState extends ChangeNotifier {
     _goal = prefs.getInt('goal') ?? kDefaultGoal;
     _coins = prefs.getInt('coins') ?? 0;
 
-    _owned.addAll(prefs.getStringList('owned_outfits') ?? const []);
-    final outfit = prefs.getString('outfit');
-    if (outfit != null && _owned.contains(outfit)) _outfit = outfit;
+    await _migrateOutfits(prefs);
+    _owned.addAll((prefs.getStringList('owned_items') ?? const []).where((id) => itemById(id) != null));
+    for (final slot in ItemSlot.values) {
+      final id = prefs.getString('wear_${slot.name}');
+      if (id != null && _owned.contains(id)) _equipped[slot] = id;
+    }
 
     final rawHistory = prefs.getString('history');
     if (rawHistory != null) {
@@ -233,21 +254,47 @@ class GameState extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool buyOutfit(Outfit outfit) {
-    if (_owned.contains(outfit.id) || _coins < outfit.price) return false;
-    _coins -= outfit.price;
-    _owned.add(outfit.id);
+  /// One-time conversion of outfits bought in earlier versions into the
+  /// matching deels.
+  Future<void> _migrateOutfits(SharedPreferences prefs) async {
+    final oldOwned = prefs.getStringList('owned_outfits');
+    if (oldOwned != null) {
+      final owned = {...?prefs.getStringList('owned_items')};
+      for (final old in oldOwned) {
+        final id = legacyOutfitIds[old];
+        if (id != null) owned.add(id);
+      }
+      await prefs.setStringList('owned_items', owned.toList());
+      await prefs.remove('owned_outfits');
+    }
+    final oldWorn = legacyOutfitIds[prefs.getString('outfit')];
+    if (oldWorn != null) await prefs.setString('wear_${ItemSlot.deel.name}', oldWorn);
+    await prefs.remove('outfit');
+  }
+
+  bool buy(ShopItem item) {
+    if (_owned.contains(item.id) || _coins < item.price) return false;
+    _coins -= item.price;
+    _owned.add(item.id);
     _prefs?.setInt('coins', _coins);
-    _prefs?.setStringList('owned_outfits', _owned.toList());
+    _prefs?.setStringList('owned_items', _owned.toList());
     // Put it on right away so the purchase is visible.
-    wearOutfit(outfit);
+    if (!isWearing(item)) toggleWear(item);
     return true;
   }
 
-  void wearOutfit(Outfit outfit) {
-    if (!_owned.contains(outfit.id)) return;
-    _outfit = outfit.id;
-    _prefs?.setString('outfit', outfit.id);
+  bool isWearing(ShopItem item) => _equipped[item.slot] == item.id;
+
+  /// Puts an owned item on, or takes it off if it's already worn.
+  void toggleWear(ShopItem item) {
+    if (!_owned.contains(item.id)) return;
+    if (isWearing(item)) {
+      _equipped.remove(item.slot);
+      _prefs?.remove('wear_${item.slot.name}');
+    } else {
+      _equipped[item.slot] = item.id;
+      _prefs?.setString('wear_${item.slot.name}', item.id);
+    }
     notifyListeners();
   }
 

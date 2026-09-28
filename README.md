@@ -18,15 +18,18 @@ young man or a pretty young woman as you walk.
   daily totals through Android Health Connect (refreshed on open and every 2
   minutes while open) and, per day, shows whichever of phone sensor / Health
   Connect saw more steps. Requires Android 8.0+.
-- **Character art** from `assets/characters/<boy|girl>_<outfit>.png`
-  (cut out from the reference illustration; the deels were closed up so the
-  belly never shows).
-- **Chubby → fit**: at 0 steps the belly area of the picture is widened;
-  it eases back to the original illustration as today's steps reach the goal.
+- **6 body levels** (1 = fit … 6 = obese) per gender, from the reference art
+  (`assets/characters/{boy,girl}_level{1..6}.png`). The day starts at level 6
+  when the goal is 10,000+ steps, or level 5 for smaller goals, and steps down
+  evenly to level 1 as today's steps reach the goal.
+- **Items fitted to every level**: hats, tops, shoes and the belt are
+  pre-fitted onto each of the 12 bodies (`assets/layers/`, offsets in
+  `layers.json`). Deels are complete outfits (with their own hat and boots),
+  widened at runtime to each level's body width.
 - **Daily goal** (default 10,000), editable in Settings.
-- **Outfit shop**: everyone starts in a plain deel; buy the blue silk deel with
-  тоорцог and medal, the red silk deel with a fox-fur лоовууз, or the golden
-  deel with жанжин малгай and bow. Earn coins by watching rewarded ads.
+- **Market (Зах)**: 4 deels (Казах, Буриад, Халх, Торгон), 4 hats, a
+  cashmere sweater and two Соёмбо hoodies, running and winged shoes, and a
+  champion belt. Earn coins by watching rewarded ads.
 - **History (Түүх)**: last-30-days chart with goal line, best day, average,
   total, goal streak, and a day-by-day record list.
 - **Friends (Найзууд)**: pick a display name, share an invite with your
@@ -91,8 +94,8 @@ The project is pinned to Flutter 3.27.1 (see the workflow).
 
 | Path | What |
 |---|---|
-| `lib/widgets/character.dart` | Shows the character image and the chubby→fit belly widening |
-| `lib/models/outfit.dart` | Outfit catalog (names, prices, image per gender) |
+| `lib/widgets/character.dart` | Draws the body for the level + item layers, or a widened deel |
+| `lib/models/items.dart` | Market catalog (slots, names, prices, asset paths) |
 | `lib/state/app_state.dart` | Steps, history, goal, coins, wardrobe, gender |
 | `lib/state/social_state.dart` | Supabase REST client: anonymous auth, profile, friends, leaderboard |
 | `lib/screens/` | Home, Friends, History, Shop, Settings, character picker |

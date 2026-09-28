@@ -1,13 +1,15 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../models/outfit.dart';
+import '../models/items.dart';
 import '../state/app_state.dart';
 
 final Map<String, Future<ui.Image>> _imageCache = {};
+Future<Map<String, List<int>>>? _layerOffsets;
 
 Future<ui.Image> _loadImage(String asset) => _imageCache.putIfAbsent(asset, () async {
       final data = await rootBundle.load(asset);
@@ -15,49 +17,97 @@ Future<ui.Image> _loadImage(String asset) => _imageCache.putIfAbsent(asset, () a
       return (await codec.getNextFrame()).image;
     });
 
-/// Бондоолой, drawn from the character illustrations. While chubby, the
-/// belly area of the picture is widened; it eases back to the original
-/// illustration as the day's goal is reached.
+Future<Map<String, List<int>>> _loadOffsets() => _layerOffsets ??= () async {
+      final raw = jsonDecode(await rootBundle.loadString('assets/layers/layers.json')) as Map<String, dynamic>;
+      return raw.map((k, v) => MapEntry(k, (v as List).cast<int>()));
+    }();
+
+/// Layers are drawn in this order over the base body.
+const _layerOrder = [ItemSlot.shoes, ItemSlot.top, ItemSlot.belt, ItemSlot.hat];
+
+/// How much wider the body is at each level than at level 1 (measured on the
+/// base illustrations); used to widen deels, which only exist at one size.
+const Map<Gender, List<double>> _levelWidth = {
+  Gender.male: [1.0, 1.034, 1.079, 1.213, 1.371, 1.607],
+  Gender.female: [1.0, 1.011, 1.044, 1.189, 1.344, 1.6],
+};
+
+class _Layer {
+  final ui.Image image;
+  final Offset offset;
+  const _Layer(this.image, this.offset);
+}
+
+class _Look {
+  final ui.Image body;
+  final bool isDeel;
+  final List<_Layer> layers;
+  const _Look(this.body, this.isDeel, this.layers);
+}
+
+/// Бондоолой at a body [level] (1 = fit … 6 = obese) wearing [equipped].
 class CharacterWidget extends StatelessWidget {
-  /// 1.0 = chubbiest (no steps yet), 0.15 = fit.
-  final double chubbiness;
-  final String outfitId;
+  final int level;
   final Gender gender;
+  final Map<ItemSlot, String> equipped;
   final double height;
 
   const CharacterWidget({
     super.key,
-    required this.chubbiness,
-    required this.outfitId,
+    required this.level,
     required this.gender,
+    this.equipped = const {},
     this.height = 420,
   });
 
-  /// Source illustration aspect (width / height) and the extra width
-  /// reserved for the widest (chubbiest) belly.
-  static const double _imageAspect = 380 / 980;
-  static const double _maxStretch = 1.4;
+  /// All character images share one 520x680 canvas.
+  static const double canvasWidth = 520;
+  static const double canvasHeight = 680;
+
+  Future<_Look> _load() async {
+    final deel = equipped[ItemSlot.deel];
+    if (deel != null) {
+      return _Look(await _loadImage(deelAsset(gender, deel)), true, const []);
+    }
+    final offsets = await _loadOffsets();
+    final body = await _loadImage(baseAsset(gender, level));
+    final layers = <_Layer>[];
+    for (final slot in _layerOrder) {
+      final id = equipped[slot];
+      if (id == null) continue;
+      final key = layerKey(gender, level, id);
+      final offset = offsets[key];
+      if (offset == null) continue;
+      final image = await _loadImage('assets/layers/$key.png');
+      layers.add(_Layer(image, Offset(offset[0].toDouble(), offset[1].toDouble())));
+    }
+    return _Look(body, false, layers);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final width = height * _imageAspect * _maxStretch;
-    final asset = outfitById(outfitId).asset(gender);
+    final width = height * canvasWidth / canvasHeight;
+    final signature = '${gender.name}/$level/${ItemSlot.values.map((s) => equipped[s] ?? '-').join(',')}';
     return SizedBox(
       width: width,
       height: height,
-      child: FutureBuilder<ui.Image>(
-        future: _loadImage(asset),
+      child: FutureBuilder<_Look>(
+        key: ValueKey(signature),
+        future: _load(),
         builder: (context, snap) {
-          final image = snap.data;
-          if (image == null) return const SizedBox.shrink();
-          final amount = ((chubbiness - 0.15) / 0.85).clamp(0.0, 1.0);
-          return TweenAnimationBuilder<double>(
-            tween: Tween(end: amount),
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.easeOutCubic,
-            builder: (context, a, _) => CustomPaint(
-              painter: _ChubbyPainter(image, a),
-            ),
+          final look = snap.data;
+          return AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            child: look == null
+                ? const SizedBox.expand()
+                : CustomPaint(
+                    key: ValueKey(signature),
+                    size: Size(width, height),
+                    painter: _LookPainter(
+                      look,
+                      look.isDeel ? _levelWidth[gender]![level.clamp(1, 6) - 1] : 1.0,
+                    ),
+                  ),
           );
         },
       ),
@@ -65,55 +115,57 @@ class CharacterWidget extends StatelessWidget {
   }
 }
 
-class _ChubbyPainter extends CustomPainter {
-  final ui.Image image;
+class _LookPainter extends CustomPainter {
+  final _Look look;
 
-  /// 0 = original illustration, 1 = chubbiest.
-  final double amount;
+  /// Belly widening for deels (1.0 = as drawn).
+  final double widen;
 
-  _ChubbyPainter(this.image, this.amount);
+  _LookPainter(this.look, this.widen);
 
-  /// Extra width per height: most at the belly, a little for the head
-  /// (rounder cheeks), almost none at the feet.
-  static double _profile(double y) => 0.05 + 0.33 * math.exp(-math.pow((y - 0.58) / 0.13, 2));
+  /// Share of the widening applied at a given height (0 = top of canvas):
+  /// full at the belly, a little at the head and feet.
+  static double _profile(double y) => 0.12 + 0.88 * math.exp(-math.pow((y - 0.66) / 0.19, 2));
 
   @override
   void paint(Canvas canvas, Size size) {
-    final iw = image.width.toDouble();
-    final ih = image.height.toDouble();
-    final scale = size.height / ih;
-    final baseW = iw * scale;
-    final cx = size.width / 2;
+    final scale = size.width / CharacterWidget.canvasWidth;
     final paint = Paint()..filterQuality = FilterQuality.medium;
+    final body = look.body;
+    final iw = body.width.toDouble();
+    final ih = body.height.toDouble();
 
-    if (amount <= 0.001) {
-      canvas.drawImageRect(
-        image,
-        Rect.fromLTWH(0, 0, iw, ih),
-        Rect.fromLTWH(cx - baseW / 2, 0, baseW, size.height),
-        paint,
-      );
-      return;
+    if (widen <= 1.001) {
+      canvas.drawImageRect(body, Rect.fromLTWH(0, 0, iw, ih), Offset.zero & size, paint);
+    } else {
+      // Thin horizontal strips, each stretched by the belly profile.
+      const strips = 170;
+      final srcStep = ih / strips;
+      final dstStep = size.height / strips;
+      final cx = size.width / 2;
+      for (var i = 0; i < strips; i++) {
+        final k = 1 + (widen - 1) * _profile((i + 0.5) / strips);
+        final w = size.width * k;
+        canvas.drawImageRect(
+          body,
+          Rect.fromLTWH(0, i * srcStep, iw, srcStep),
+          Rect.fromLTWH(cx - w / 2, i * dstStep, w, dstStep + 0.6),
+          paint,
+        );
+      }
     }
 
-    // Draw the illustration in thin horizontal strips, each stretched by the
-    // belly profile, so the widening is smooth from head to feet.
-    const strips = 140;
-    final srcStep = ih / strips;
-    final dstStep = size.height / strips;
-    for (var i = 0; i < strips; i++) {
-      final k = 1 + amount * _profile((i + 0.5) / strips);
-      final w = baseW * k;
+    for (final layer in look.layers) {
+      final img = layer.image;
       canvas.drawImageRect(
-        image,
-        Rect.fromLTWH(0, i * srcStep, iw, srcStep),
-        // Slight overlap hides hairline seams between strips.
-        Rect.fromLTWH(cx - w / 2, i * dstStep, w, dstStep + 0.6),
+        img,
+        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+        Rect.fromLTWH(layer.offset.dx * scale, layer.offset.dy * scale, img.width * scale, img.height * scale),
         paint,
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ChubbyPainter old) => old.image != image || old.amount != amount;
+  bool shouldRepaint(covariant _LookPainter old) => old.look != look || old.widen != widen;
 }

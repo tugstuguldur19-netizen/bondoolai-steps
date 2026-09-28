@@ -124,14 +124,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: FittedBox(
                   child: CharacterWidget(
-                    chubbiness: game.chubbiness,
-                    outfitId: game.outfitId,
+                    level: game.level,
                     gender: game.gender,
+                    equipped: game.equipped,
                   ),
                 ),
               ),
             ),
-            Text(cheer, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+            _LevelChip(level: game.level, max: game.startLevel),
+            const SizedBox(height: 4),
+            Text(
+              game.stepsToNextLevel == null
+                  ? cheer
+                  : 'Дараагийн түвшин хүртэл ${formatNumber(game.stepsToNextLevel!)} алхам',
+              style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
               child: ClipRRect(
@@ -152,6 +159,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const _WatchAdButton(),
             const SizedBox(height: 16),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+const _levelNames = ['Чийрэг', 'Галбирлаг', 'Дундаж', 'Булцгар', 'Илүүдэл жинтэй', 'Бүдүүн'];
+
+class _LevelChip extends StatelessWidget {
+  final int level;
+  final int max;
+  const _LevelChip({required this.level, required this.max});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: level == 1 ? Colors.green.shade100 : scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Түвшин $level/$max · ${_levelNames[level - 1]}',
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: level == 1 ? Colors.green.shade900 : scheme.onSecondaryContainer,
         ),
       ),
     );

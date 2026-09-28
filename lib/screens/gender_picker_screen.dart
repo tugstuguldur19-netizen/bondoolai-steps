@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
-import '../models/outfit.dart';
 import '../widgets/character.dart';
 
 /// Shown on first launch before anything else.
@@ -103,8 +102,7 @@ class _GenderCard extends StatelessWidget {
                 height: compact ? 120 : 220,
                 child: FittedBox(
                   child: CharacterWidget(
-                    chubbiness: 1.0,
-                    outfitId: defaultOutfitId,
+                    level: 6,
                     gender: gender,
                     height: 320,
                   ),

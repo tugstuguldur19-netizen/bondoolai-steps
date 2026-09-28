@@ -42,7 +42,11 @@ class _Look {
   final ui.Image body;
   final bool isDeel;
   final List<_Layer> layers;
-  const _Look(this.body, this.isDeel, this.layers);
+
+  /// Cut out of the body before the layers are drawn (the figure's own
+  /// sneakers when other shoes are worn).
+  final _Layer? eraser;
+  const _Look(this.body, this.isDeel, this.layers, [this.eraser]);
 }
 
 /// Бондоолой at a body [level] (1 = fit … 6 = obese) wearing [equipped].
@@ -71,17 +75,23 @@ class CharacterWidget extends StatelessWidget {
     }
     final offsets = await _loadOffsets();
     final body = await _loadImage(baseAsset(gender, level));
+    Future<_Layer?> layer(String id) async {
+      final key = layerKey(gender, level, id);
+      final offset = offsets[key];
+      if (offset == null) return null;
+      final image = await _loadImage('assets/layers/$key.png');
+      return _Layer(image, Offset(offset[0].toDouble(), offset[1].toDouble()));
+    }
+
     final layers = <_Layer>[];
     for (final slot in _layerOrder) {
       final id = equipped[slot];
       if (id == null) continue;
-      final key = layerKey(gender, level, id);
-      final offset = offsets[key];
-      if (offset == null) continue;
-      final image = await _loadImage('assets/layers/$key.png');
-      layers.add(_Layer(image, Offset(offset[0].toDouble(), offset[1].toDouble())));
+      final l = await layer(id);
+      if (l != null) layers.add(l);
     }
-    return _Look(body, false, layers);
+    final eraser = equipped.containsKey(ItemSlot.shoes) ? await layer('erase_shoes') : null;
+    return _Look(body, false, layers, eraser);
   }
 
   @override
@@ -135,7 +145,13 @@ class _LookPainter extends CustomPainter {
     final iw = body.width.toDouble();
     final ih = body.height.toDouble();
 
-    if (widen <= 1.001) {
+    final eraser = look.eraser;
+    if (eraser != null) {
+      canvas.saveLayer(Offset.zero & size, Paint());
+      canvas.drawImageRect(body, Rect.fromLTWH(0, 0, iw, ih), Offset.zero & size, paint);
+      _drawLayer(canvas, eraser, scale, Paint()..blendMode = BlendMode.dstOut);
+      canvas.restore();
+    } else if (widen <= 1.001) {
       canvas.drawImageRect(body, Rect.fromLTWH(0, 0, iw, ih), Offset.zero & size, paint);
     } else {
       // Thin horizontal strips, each stretched by the belly profile.
@@ -156,14 +172,18 @@ class _LookPainter extends CustomPainter {
     }
 
     for (final layer in look.layers) {
-      final img = layer.image;
-      canvas.drawImageRect(
-        img,
-        Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-        Rect.fromLTWH(layer.offset.dx * scale, layer.offset.dy * scale, img.width * scale, img.height * scale),
-        paint,
-      );
+      _drawLayer(canvas, layer, scale, paint);
     }
+  }
+
+  static void _drawLayer(Canvas canvas, _Layer layer, double scale, Paint paint) {
+    final img = layer.image;
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Rect.fromLTWH(layer.offset.dx * scale, layer.offset.dy * scale, img.width * scale, img.height * scale),
+      paint,
+    );
   }
 
   @override

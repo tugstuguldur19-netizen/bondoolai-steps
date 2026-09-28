@@ -24,12 +24,14 @@ young man or a pretty young woman as you walk.
   evenly to level 1 as today's steps reach the goal.
 - **Items fitted to every level**: hats, tops, shoes and the belt are
   pre-fitted onto each of the 12 bodies (`assets/layers/`, offsets in
-  `layers.json`). Deels are complete outfits (with their own hat and boots),
+  `layers.json`) with soft contact shadows; the belt wraps around the belly
+  behind the arms, and when shoes are worn the figure's own sneakers are cut
+  away (`*_erase_shoes` masks). Deels are complete outfits (with their own hat and boots),
   widened at runtime to each level's body width.
 - **Daily goal** (default 10,000), editable in Settings.
 - **Market (Зах)**: 4 deels (Казах, Буриад, Халх, Торгон), 4 hats, a
   cashmere sweater and two Соёмбо hoodies, running and winged shoes, and a
-  champion belt. Earn coins by watching rewarded ads.
+  champion belt with a gold Соёмбо. Earn coins by watching rewarded ads.
 - **History (Түүх)**: last-30-days chart with goal line, best day, average,
   total, goal streak, and a day-by-day record list.
 - **Friends (Найзууд)**: pick a display name, share an invite with your
